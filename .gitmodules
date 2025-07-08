@@ -1,0 +1,3 @@
+[submodule "pigeonium"]
+	path = pigeonium
+	url = https://github.com/pigeonium/pigeonium-core.git

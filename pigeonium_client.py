@@ -53,9 +53,9 @@ class PigeoniumClient:
             print(f"{e.response.status_code}: {e.response.text}")
             raise e
 
-    def _get(self, endpoint: str) -> Dict[str, Any]:
+    def _get(self, endpoint: str, params: dict={}) -> Dict[str, Any]:
         try:
-            response = self.session.get(f"{self.base_url}{endpoint}")
+            response = self.session.get(f"{self.base_url}{endpoint}", params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -93,9 +93,22 @@ class PigeoniumClient:
             bals[bytes.fromhex(cu_id)] = result[cu_id]
         return bals
     
-    def get_currency(self, currency_id: bytes) -> pigeonium.Currency|None:
+    def get_currency(
+        self,
+        currency_id: Optional[bytes] = None,
+        name: Optional[str] = None,
+        symbol: Optional[str] = None,
+        issuer: Optional[bytes] = None
+    ) -> pigeonium.Currency|None:
         try:
-            response = self._get(f"/currency/{currency_id.hex()}")
+            if currency_id:
+                response = self._get(f"/currency", {"currencyId": currency_id.hex()})
+            elif name:
+                response = self._get(f"/currency", {"name": name})
+            elif symbol:
+                response = self._get(f"/currency", {"symbol": symbol})
+            elif issuer:
+                response = self._get(f"/currency", {"issuer": issuer.hex()})
             cu = pigeonium.Currency()
             cu.currencyId = bytes.fromhex(response['currencyId'])
             cu.name = response['name']

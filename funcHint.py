@@ -23,7 +23,12 @@ def sha3_512(string:bytes) -> bytes:
 def getBalance(address:bytes, currencyId:bytes) -> int:
     ...
 
-def getCurrency(currencyId:bytes) -> Currency|None:
+def getCurrency(
+        currencyId:Optional[bytes]=None,
+        name:Optional[str]=None,
+        symbol:Optional[str]=None,
+        issuer:Optional[bytes]=None
+    ) -> Currency|None:
     ...
 
 def getSelfCurrency() -> Currency|None:

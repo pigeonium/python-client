@@ -1,6 +1,6 @@
 import requests
 import pigeonium
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Literal, List, Any
 
 class PigeoniumClient:
     """
@@ -118,6 +118,59 @@ class PigeoniumClient:
             return cu
         except:
             return None
+    
+    def get_transaction(self, index_id: int) -> Optional[pigeonium.Transaction]:
+        """
+        指定されたインデックスIDのトランザクションを取得します。
+
+        Args:
+            index_id (int): トランザクションのインデックスID。
+
+        Returns:
+            Optional[pigeonium.Transaction]: トランザクション情報。見つからない場合はNone。
+        """
+        try:
+            response = self._get(f"/transaction/{index_id}")
+            if response:
+                return pigeonium.Transaction.fromHexDict(response)
+            return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                return None
+            raise e
+
+    def get_transactions(
+        self,
+        address: Optional[bytes] = None,
+        limit: int = 20,
+        offset: int = 0,
+        sort_by: Literal["indexId", "timestamp", "amount", "feeAmount"] = "indexId",
+        sort_order: Literal["ASC", "DESC"] = "DESC"
+    ) -> List[pigeonium.Transaction]:
+        """
+        条件に一致するトランザクションのリストを取得します。
+
+        Args:
+            address (Optional[bytes], optional): 検索するアドレス。 Defaults to None.
+            limit (int, optional): 取得する件数。 Defaults to 20.
+            offset (int, optional): スキップする件数。 Defaults to 0.
+            sort_by (str, optional): ソートの基準。 Defaults to "indexId".
+            sort_order (str, optional): ソート順 ('ASC' or 'DESC')。 Defaults to "DESC".
+
+        Returns:
+            List[pigeonium.Transaction]: トランザクションのリスト。
+        """
+        params = {
+            "limit": limit,
+            "offset": offset,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
+        if address:
+            params["address"] = address.hex()
+
+        response = self._get("/transactions", params=params)
+        return [pigeonium.Transaction.fromHexDict(tx) for tx in response]
     
     def send_transaction(
         self,

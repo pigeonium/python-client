@@ -2,6 +2,50 @@ import requests
 import pigeonium
 from typing import Optional, Dict, Literal, List, Any
 
+class IterableTransaction:
+    def __init__(
+        self,client:"PigeoniumClient",
+        params: dict,
+        indexId_start: Optional[int] = None,
+        sort_order: Literal["ASC", "DESC"] = "DESC"
+    ):
+        self._client = client
+        self.params = params
+        self.params['sort_order'] = sort_order
+        self.sort_order = sort_order
+        self.offset = 0
+        self.txs:List[pigeonium.Transaction] = []
+        self.indexId_start = indexId_start
+        self.end_flag = False
+    
+    def __iter__(self):
+        self.offset = 0
+        self.txs = []
+        self.end_flag = False
+        if self.indexId_start:
+            self.params['indexId_start'] = self.indexId_start
+        return self
+    
+    def __next__(self):
+        if not self.txs:
+            if self.end_flag:
+                raise StopIteration
+            self.params['offset'] = self.offset
+            params = self.params
+
+            response = self._client._get("/transactions", params=params)
+            if not response: raise StopIteration
+            self.offset += self.params['limit']
+            response_tx = [pigeonium.Transaction.fromHexDict(tx) for tx in response]
+            self.txs += response_tx
+            if len(response_tx) < self.params['limit']:
+                self.end_flag = True
+        tx = self.txs.pop(0)
+        if not 'indexId_start' in self.params and self.txs:
+            self.params['indexId_start'] = self.txs[-1].indexId + 1 if self.sort_order == "ASC" else self.txs[-1].indexId - 1
+            self.offset = 0
+        return tx
+
 class PigeoniumClient:
     """
     Pigeoniumネットワークと対話するためのクライアント。
@@ -142,24 +186,21 @@ class PigeoniumClient:
     def get_transactions(
         self,
         address: Optional[bytes] = None,
-        limit: int = 20,
-        offset: int = 0,
+        source: Optional[bytes] = None,
+        dest: Optional[bytes] = None,
+        currencyId: Optional[bytes] = None,
+        amount_min: Optional[int] = None,
+        amount_max: Optional[int] = None,
+        indexId_start: Optional[int] = None,
+        indexId_end: Optional[int] = None,
+        timestamp_start: Optional[int] = None,
+        timestamp_end: Optional[int] = None,
+        is_contract: Optional[bool] = None,
         sort_by: Literal["indexId", "timestamp", "amount", "feeAmount"] = "indexId",
-        sort_order: Literal["ASC", "DESC"] = "DESC"
+        sort_order: Literal["ASC", "DESC"] = "DESC",
+        limit: int = 20,
+        offset: int = 0
     ) -> List[pigeonium.Transaction]:
-        """
-        条件に一致するトランザクションのリストを取得します。
-
-        Args:
-            address (Optional[bytes], optional): 検索するアドレス。 Defaults to None.
-            limit (int, optional): 取得する件数。 Defaults to 20.
-            offset (int, optional): スキップする件数。 Defaults to 0.
-            sort_by (str, optional): ソートの基準。 Defaults to "indexId".
-            sort_order (str, optional): ソート順 ('ASC' or 'DESC')。 Defaults to "DESC".
-
-        Returns:
-            List[pigeonium.Transaction]: トランザクションのリスト。
-        """
         params = {
             "limit": limit,
             "offset": offset,
@@ -168,6 +209,26 @@ class PigeoniumClient:
         }
         if address:
             params["address"] = address.hex()
+        if source:
+            params["source"] = source.hex()
+        if dest:
+            params["dest"] = dest.hex()
+        if currencyId:
+            params["currencyId"] = currencyId.hex()
+        if amount_min is not None:
+            params["amount_min"] = amount_min
+        if amount_max is not None:
+            params["amount_max"] = amount_max
+        if indexId_start is not None:
+            params["indexId_start"] = indexId_start
+        if indexId_end is not None:
+            params["indexId_end"] = indexId_end
+        if timestamp_start is not None:
+            params["timestamp_start"] = timestamp_start
+        if timestamp_end is not None:
+            params["timestamp_end"] = timestamp_end
+        if is_contract is not None:
+            params["is_contract"] = is_contract
 
         response = self._get("/transactions", params=params)
         return [pigeonium.Transaction.fromHexDict(tx) for tx in response]
@@ -218,6 +279,46 @@ class PigeoniumClient:
         response = self._post("/transaction", payload)
 
         return pigeonium.Transaction.fromHexDict(response)
+    
+    def IterableTransaction(
+        self,
+        address: Optional[bytes] = None,
+        source: Optional[bytes] = None,
+        dest: Optional[bytes] = None,
+        currencyId: Optional[bytes] = None,
+        amount_min: Optional[int] = None,
+        amount_max: Optional[int] = None,
+        indexId_start: Optional[int] = None,
+        timestamp_start: Optional[int] = None,
+        timestamp_end: Optional[int] = None,
+        is_contract: Optional[bool] = None,
+        sort_order: Literal["ASC", "DESC"] = "DESC",
+    ):
+        params = {
+            "limit": 20,
+            "sort_by": "indexId",
+            "sort_order": sort_order,
+        }
+        if address:
+            params["address"] = address.hex()
+        if source:
+            params["source"] = source.hex()
+        if dest:
+            params["dest"] = dest.hex()
+        if currencyId:
+            params["currencyId"] = currencyId.hex()
+        if amount_min is not None:
+            params["amount_min"] = amount_min
+        if amount_max is not None:
+            params["amount_max"] = amount_max
+        if timestamp_start is not None:
+            params["timestamp_start"] = timestamp_start
+        if timestamp_end is not None:
+            params["timestamp_end"] = timestamp_end
+        if is_contract is not None:
+            params["is_contract"] = is_contract
+        
+        return IterableTransaction(self, params, indexId_start, sort_order)
 
     def deploy_contract(
         self,
